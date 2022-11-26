@@ -82,9 +82,9 @@ slos:
 const Version = "prometheus/v1"
 ```
 
-## type [Alert](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L152-L161>)
+## type Alert
 
-Alert configures specific SLO alert\.
+Alert configures specific SLO alert.
 
 ```go
 type Alert struct {
@@ -99,9 +99,9 @@ type Alert struct {
 }
 ```
 
-## type [Alerting](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L137-L149>)
+## type Alerting
 
-Alerting wraps all the configuration required by the SLO alerts\.
+Alerting wraps all the configuration required by the SLO alerts.
 
 ```go
 type Alerting struct {
@@ -119,11 +119,11 @@ type Alerting struct {
 }
 ```
 
-## type [SLI](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L99-L106>)
+## type SLI
 
-SLI will tell what is good or bad for the SLO\. All SLIs will be get based on time windows\, that's why Sloth needs the queries to use \`\{\{\.window\}\}\` template variable\.
+SLI will tell what is good or bad for the SLO. All SLIs will be get based on time windows, that's why Sloth needs the queries to use \`\{\{.window\}\}\` template variable.
 
-Only one of the SLI types can be used\.
+Only one of the SLI types can be used.
 
 ```go
 type SLI struct {
@@ -136,9 +136,9 @@ type SLI struct {
 }
 ```
 
-## type [SLIEvents](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L117-L126>)
+## type SLIEvents
 
-SLIEvents is an SLI that is calculated as the division of bad events and total events\, giving a ratio SLI\. Normally this is the most common ratio type\.
+SLIEvents is an SLI that is calculated as the division of bad events and total events, giving a ratio SLI. Normally this is the most common ratio type.
 
 ```go
 type SLIEvents struct {
@@ -153,9 +153,9 @@ type SLIEvents struct {
 }
 ```
 
-## type [SLIPlugin](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L129-L134>)
+## type SLIPlugin
 
-SLIPlugin will use the SLI returned by the SLI plugin selected along with the options\.
+SLIPlugin will use the SLI returned by the SLI plugin selected along with the options.
 
 ```go
 type SLIPlugin struct {
@@ -166,9 +166,9 @@ type SLIPlugin struct {
 }
 ```
 
-## type [SLIRaw](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L110-L113>)
+## type SLIRaw
 
-SLIRaw is a error ratio SLI already calculated\. Normally this will be used when the SLI is already calculated by other recording rule\, system\.\.\.
+SLIRaw is a error ratio SLI already calculated. Normally this will be used when the SLI is already calculated by other recording rule, system...
 
 ```go
 type SLIRaw struct {
@@ -177,9 +177,9 @@ type SLIRaw struct {
 }
 ```
 
-## type [SLO](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L76-L92>)
+## type SLO
 
-SLO is the configuration/declaration of the service level objective of a service\.
+SLO is the configuration/declaration of the service level objective of a service.
 
 ```go
 type SLO struct {
@@ -201,9 +201,9 @@ type SLO struct {
 }
 ```
 
-## type [Spec](<https://github.com/slok/sloth/blob/main/pkg/prometheus/api/v1/v1.go#L62-L72>)
+## type Spec
 
-Spec represents the root type of the SLOs declaration specification\.
+Spec represents the root type of the SLOs declaration specification.
 
 ```go
 type Spec struct {

@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -15,6 +16,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclientset "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	prometheusmodel "github.com/prometheus/common/model"
 	"github.com/slok/reload"
 	koopercontroller "github.com/spotahome/kooper/v2/controller"
 	kooperlog "github.com/spotahome/kooper/v2/log"
@@ -50,20 +52,23 @@ const (
 )
 
 type kubeControllerCommand struct {
-	extraLabels       map[string]string
-	workers           int
-	kubeConfig        string
-	kubeContext       string
-	resyncInterval    time.Duration
-	namespace         string
-	labelSelector     string
-	kubeLocal         bool
-	runMode           string
-	metricsPath       string
-	hotReloadPath     string
-	hotReloadAddr     string
-	metricsListenAddr string
-	sliPluginsPaths   []string
+	extraLabels           map[string]string
+	workers               int
+	kubeConfig            string
+	kubeContext           string
+	resyncInterval        time.Duration
+	namespace             string
+	labelSelector         string
+	kubeLocal             bool
+	runMode               string
+	metricsPath           string
+	hotReloadPath         string
+	hotReloadAddr         string
+	metricsListenAddr     string
+	sliPluginsPaths       []string
+	sloPeriodWindowsPath  string
+	sloPeriod             string
+	disableOptimizedRules bool
 }
 
 // NewKubeControllerCommand returns the Kubernetes controller command.
@@ -88,17 +93,50 @@ func NewKubeControllerCommand(app *kingpin.Application) Command {
 	cmd.Flag("hot-reload-path", "The webhook path for hot-reloading components that allow it.").Default("/-/reload").StringVar(&c.hotReloadPath)
 	cmd.Flag("extra-labels", "Extra labels that will be added to all the generated Prometheus rules ('key=value' form, can be repeated).").Short('l').StringMapVar(&c.extraLabels)
 	cmd.Flag("sli-plugins-path", "The path to SLI plugins (can be repeated), if not set it disable plugins support.").Short('p').StringsVar(&c.sliPluginsPaths)
+	cmd.Flag("slo-period-windows-path", "The directory path to custom SLO period windows catalog (replaces default ones).").StringVar(&c.sloPeriodWindowsPath)
+	cmd.Flag("default-slo-period", "The default SLO period windows to be used for the SLOs.").Default("30d").StringVar(&c.sloPeriod)
+	cmd.Flag("disable-optimized-rules", "If enabled it will disable optimized generated rules.").BoolVar(&c.disableOptimizedRules)
 
 	return c
 }
 
 func (k kubeControllerCommand) Name() string { return "kubernetes-controller" }
 func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error {
-	pluginRepo, err := createPluginLoader(ctx, config.Logger, k.sliPluginsPaths)
+	logger := config.Logger.WithValues(log.Kv{"window": k.sloPeriod})
+
+	// SLO period.
+	sp, err := prometheusmodel.ParseDuration(k.sloPeriod)
+	if err != nil {
+		return fmt.Errorf("invalid SLO period duration: %w", err)
+	}
+	sloPeriod := time.Duration(sp)
+
+	// Plugins.
+	pluginRepo, err := createPluginLoader(ctx, logger, k.sliPluginsPaths)
 	if err != nil {
 		return err
 	}
 
+	// Windows repository.
+	var wfs fs.FS
+	if k.sloPeriodWindowsPath != "" {
+		wfs = os.DirFS(k.sloPeriodWindowsPath)
+	}
+	windowsRepo, err := alert.NewFSWindowsRepo(alert.FSWindowsRepoConfig{
+		FS:     wfs,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("could not load SLO period windows repository: %w", err)
+	}
+
+	// Check if the default slo period is supported by our windows repo.
+	_, err = windowsRepo.GetWindows(ctx, sloPeriod)
+	if err != nil {
+		return fmt.Errorf("invalid default slo period: %w", err)
+	}
+
+	// Kubernetes services.
 	ksvc, err := k.newKubernetesService(ctx, config)
 	if err != nil {
 		return fmt.Errorf("could not create Kubernetes service: %w", err)
@@ -110,7 +148,7 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 	if err != nil {
 		return fmt.Errorf("check for PrometheusServiceLevel CRD failed: could not list: %w", err)
 	}
-	config.Logger.Debugf("PrometheusServiceLevel CRD ready")
+	logger.Debugf("PrometheusServiceLevel CRD ready")
 
 	// Prepare our run and reload entrypoints.
 	var g run.Group
@@ -126,8 +164,8 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		ctx, cancel := context.WithCancel(ctx)
 		g.Add(
 			func() error {
-				config.Logger.Infof("Hot-reload manager running")
-				defer config.Logger.Infof("Hot-reload manager stopped")
+				logger.Infof("Hot-reload manager running")
+				defer logger.Infof("Hot-reload manager stopped")
 				return reloadManager.Run(ctx)
 			},
 			func(_ error) {
@@ -146,18 +184,18 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		// Add hot-reload notifier for SIGHUP.
 		reloadManager.On(reload.NotifierFunc(func(ctx context.Context) (string, error) {
 			<-reloadC
-			config.Logger.Infof("Hot-reload triggered from OS SIGHUP signal")
+			logger.Infof("Hot-reload triggered from OS SIGHUP signal")
 			return "sighup", nil
 		}))
 
 		g.Add(
 			func() error {
-				config.Logger.Infof("OS signals listener started")
-				defer config.Logger.Infof("OS signals listener stopped")
+				logger.Infof("OS signals listener started")
+				defer logger.Infof("OS signals listener stopped")
 				for {
 					select {
 					case s := <-sigC:
-						config.Logger.Infof("Signal %s received", s)
+						logger.Infof("Signal %s received", s)
 						// Don't stop if SIGHUP, only reload.
 						if s == syscall.SIGHUP {
 							reloadC <- struct{}{}
@@ -182,7 +220,7 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		hotReloadC := make(chan struct{})
 		reloadManager.On(reload.NotifierFunc(func(ctx context.Context) (string, error) {
 			<-hotReloadC
-			config.Logger.Infof("Hot-reload triggered from http webhook")
+			logger.Infof("Hot-reload triggered from http webhook")
 			return "http", nil
 		}))
 
@@ -204,8 +242,8 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 
 		g.Add(
 			func() error {
-				config.Logger.WithValues(log.Kv{"addr": k.hotReloadAddr}).Infof("Hot-reload http server listening")
-				defer config.Logger.WithValues(log.Kv{"addr": k.hotReloadAddr}).Infof("Hot-reload http server stopped")
+				logger.WithValues(log.Kv{"addr": k.hotReloadAddr}).Infof("Hot-reload http server listening")
+				defer logger.WithValues(log.Kv{"addr": k.hotReloadAddr}).Infof("Hot-reload http server stopped")
 				return server.ListenAndServe()
 			},
 			func(_ error) {
@@ -213,7 +251,7 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 				defer cancel()
 				err := server.Shutdown(ctx)
 				if err != nil {
-					config.Logger.Errorf("Error shutting down hot-reload server: %w", err)
+					logger.Errorf("Error shutting down hot-reload server: %w", err)
 				}
 			},
 		)
@@ -240,8 +278,8 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 
 		g.Add(
 			func() error {
-				config.Logger.WithValues(log.Kv{"addr": k.metricsListenAddr}).Infof("Metrics http server listening")
-				defer config.Logger.WithValues(log.Kv{"addr": k.metricsListenAddr}).Infof("Metrics http server stopped")
+				logger.WithValues(log.Kv{"addr": k.metricsListenAddr}).Infof("Metrics http server listening")
+				defer logger.WithValues(log.Kv{"addr": k.metricsListenAddr}).Infof("Metrics http server stopped")
 				return server.ListenAndServe()
 			},
 			func(_ error) {
@@ -249,7 +287,7 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 				defer cancel()
 				err := server.Shutdown(ctx)
 				if err != nil {
-					config.Logger.Errorf("Error shutting down metrics server: %w", err)
+					logger.Errorf("Error shutting down metrics server: %w", err)
 				}
 			},
 		)
@@ -260,13 +298,19 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
+		// Disable optimized rules.
+		sliRuleGen := prometheus.OptimizedSLIRecordingRulesGenerator
+		if k.disableOptimizedRules {
+			sliRuleGen = prometheus.SLIRecordingRulesGenerator
+		}
+
 		// Create the generate app service (the one that the CLIs use).
 		generator, err := generate.NewService(generate.ServiceConfig{
-			AlertGenerator:              alert.AlertGenerator,
-			SLIRecordingRulesGenerator:  prometheus.SLIRecordingRulesGenerator,
+			AlertGenerator:              alert.NewGenerator(windowsRepo),
+			SLIRecordingRulesGenerator:  sliRuleGen,
 			MetaRecordingRulesGenerator: prometheus.MetadataRecordingRulesGenerator,
 			SLOAlertRulesGenerator:      prometheus.SLOAlertRulesGenerator,
-			Logger:                      generatorLogger{Logger: config.Logger},
+			Logger:                      generatorLogger{Logger: logger},
 		})
 		if err != nil {
 			return fmt.Errorf("could not create Prometheus rules generator: %w", err)
@@ -275,11 +319,11 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		// Create handler.
 		config := kubecontroller.HandlerConfig{
 			Generator:        generator,
-			SpecLoader:       k8sprometheus.NewCRSpecLoader(pluginRepo),
-			Repository:       k8sprometheus.NewPrometheusOperatorCRDRepo(ksvc, config.Logger),
+			SpecLoader:       k8sprometheus.NewCRSpecLoader(pluginRepo, sloPeriod),
+			Repository:       k8sprometheus.NewPrometheusOperatorCRDRepo(ksvc, logger),
 			KubeStatusStorer: ksvc,
 			ExtraLabels:      k.extraLabels,
-			Logger:           config.Logger,
+			Logger:           logger,
 		}
 		handler, err := kubecontroller.NewHandler(config)
 		if err != nil {
@@ -297,7 +341,7 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 		ctrl, err := koopercontroller.New(&koopercontroller.Config{
 			Handler:              handler,
 			Retriever:            ret,
-			Logger:               kooperlogger{Logger: config.Logger.WithValues(log.Kv{"lib": "kooper"})},
+			Logger:               kooperlogger{Logger: logger.WithValues(log.Kv{"lib": "kooper"})},
 			Name:                 "sloth",
 			ConcurrentWorkers:    k.workers,
 			ProcessingJobRetries: 2,
@@ -310,8 +354,8 @@ func (k kubeControllerCommand) Run(ctx context.Context, config RootConfig) error
 
 		g.Add(
 			func() error {
-				config.Logger.Infof("Kubernetes controller running")
-				defer config.Logger.Infof("Kubernetes controller stopped")
+				logger.Infof("Kubernetes controller running")
+				defer logger.Infof("Kubernetes controller stopped")
 				return ctrl.Run(ctx)
 			},
 			func(_ error) {

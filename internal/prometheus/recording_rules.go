@@ -8,7 +8,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/model/rulefmt"
 
 	"github.com/slok/sloth/internal/alert"
 	"github.com/slok/sloth/internal/info"
@@ -21,9 +21,24 @@ type sliRecordingRulesGenerator struct {
 	genFunc sliRulesgenFunc
 }
 
+// OptimizedSLIRecordingRulesGenerator knows how to generate the SLI prometheus recording rules
+// from an SLO optimizing where it can.
+// Normally these rules are used by the SLO alerts.
+var OptimizedSLIRecordingRulesGenerator = sliRecordingRulesGenerator{genFunc: optimizedFactorySLIRecordGenerator}
+
 // SLIRecordingRulesGenerator knows how to generate the SLI prometheus recording rules
-// form an SLO. Normally these rules are used by the SLO alerts.
+// form an SLO.
+// Normally these rules are used by the SLO alerts.
 var SLIRecordingRulesGenerator = sliRecordingRulesGenerator{genFunc: factorySLIRecordGenerator}
+
+func optimizedFactorySLIRecordGenerator(slo SLO, window time.Duration, alerts alert.MWMBAlertGroup) (*rulefmt.Rule, error) {
+	// Optimize the rules that are for the total period time window.
+	if window == slo.TimeWindow {
+		return optimizedSLIRecordGenerator(slo, window, alerts.PageQuick.ShortWindow)
+	}
+
+	return factorySLIRecordGenerator(slo, window, alerts)
+}
 
 func (s sliRecordingRulesGenerator) GenerateSLIRecordingRules(ctx context.Context, slo SLO, alerts alert.MWMBAlertGroup) ([]rulefmt.Rule, error) {
 	// Get the windows we need the recording rules.
@@ -49,9 +64,6 @@ const (
 
 func factorySLIRecordGenerator(slo SLO, window time.Duration, alerts alert.MWMBAlertGroup) (*rulefmt.Rule, error) {
 	switch {
-	// Optimize the rules that are for the total period time window.
-	case window == slo.TimeWindow:
-		return optimizedSLIRecordGenerator(slo, window, alerts.PageQuick.ShortWindow)
 	// Event based SLI.
 	case slo.SLI.Events != nil:
 		return eventsSLIRecordGenerator(slo, window, alerts)
@@ -174,11 +186,13 @@ count_over_time({{.metric}}{{.filter}}[{{.window}}])
 	return &rulefmt.Rule{
 		Record: slo.GetSLIErrorMetric(window),
 		Expr:   b.String(),
-		// The SLO labels will be obtained from the source SLI recording rule.
-		// We only need to set the window.
-		Labels: map[string]string{
-			sloWindowLabelName: strWindow,
-		},
+		Labels: mergeLabels(
+			slo.GetSLOIDPromLabels(),
+			map[string]string{
+				sloWindowLabelName: strWindow,
+			},
+			slo.Labels,
+		),
 	}, nil
 }
 

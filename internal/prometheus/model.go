@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	prommodel "github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/model/rulefmt"
 	promqlparser "github.com/prometheus/prometheus/promql/parser"
 )
 
@@ -42,9 +42,9 @@ type SLO struct {
 	ID              string `validate:"required,name"`
 	Name            string `validate:"required,name"`
 	Description     string
-	Service         string `validate:"required,name"`
-	SLI             SLI    `validate:"required"`
-	TimeWindow      time.Duration
+	Service         string            `validate:"required,name"`
+	SLI             SLI               `validate:"required"`
+	TimeWindow      time.Duration     `validate:"required"`
 	Objective       float64           `validate:"gt=0,lte=100"`
 	Labels          map[string]string `validate:"dive,keys,prom_label_key,endkeys,required,prom_label_value"`
 	PageAlertMeta   AlertMeta

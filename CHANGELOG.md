@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+## [v0.11.0] - 2022-10-22
+
+### Changed
+
+- Optimized SLI recording rules now have the same labels as the non-optimized ones, avoiding promtool check warnings.
+- Update to Go 1.19.
+- Update to Kubernetes v1.25.
+- `sloth_window` is ignored in alerts reducing the noise of refiring alerts.
+
+## [v0.10.0] - 2022-03-22
+
+## Added
+
+- Support Kubernetes v1.23
+- Allow disabling optimized rules using `--disable-optimized-rules`. These will disable the period window (e.g 30d) to be as the other window rules and not be optimized.
+- `generate` command now accepts a directory that will discover SLOs and generate with the same structure in an output directory.
+- Added `--fs-exclude` and `--fs-include` flags to `generate` command, that will be used when generate inputs are a directory.
+- Update Go 1.18
+
+## [v0.9.0] - 2021-11-15
+
+### Added
+
+- Added spec for declaring custom SLO period windows.
+- Added `--slo-period-windows-path` flag to load custom SLO period windows from a directory.
+
+### Changed
+
+- (BREAKING) `--window-days` flag renamed to `--default-slo-period` and now is a time.Duration instead of an integer.
+- (BREAKING) `-w` short flag has been removed.
+- Default 30 and 28 day windows are now loaded from spec files.
+
+## [v0.8.0] - 2021-10-12
+
+### Changed
+
+- OpenSLO fallbacks to Sloths time window if not set.
+- Migrated container images from dockerhub to ghcr.io.
+
+### Added
+
+- Time window validation.
+- Default time window is 30 day (same as before but was hardcoded, now can be set to a different one).
+- Support 28 day time windows.
+- Flag to select default time window.
+
 ## [v0.7.0] - 2021-10-05
 
 ### Added
@@ -116,7 +162,11 @@
 - Support raw query based SLI.
 - Kubernetes (prometheus-operator) CRD generation support.
 
-[unreleased]: https://github.com/slok/sloth/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/slok/sloth/compare/v0.11.0...HEAD
+[v0.11.0]: https://github.com/slok/sloth/compare/v0.10.0...v0.11.0
+[v0.10.0]: https://github.com/slok/sloth/compare/v0.9.0...v0.10.0
+[v0.9.0]: https://github.com/slok/sloth/compare/v0.8.0...v0.9.0
+[v0.8.0]: https://github.com/slok/sloth/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/slok/sloth/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/slok/sloth/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/slok/sloth/compare/v0.4.0...v0.5.0

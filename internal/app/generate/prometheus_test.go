@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/model/rulefmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -228,7 +228,13 @@ func TestIntegrationAppServiceGenerate(t *testing.T) {
 									Record: "slo:sli_error:ratio_rate30d",
 									Expr:   "sum_over_time(slo:sli_error:ratio_rate5m{sloth_id=\"test-id\", sloth_service=\"test-svc\", sloth_slo=\"test-name\"}[30d])\n/ ignoring (sloth_window)\ncount_over_time(slo:sli_error:ratio_rate5m{sloth_id=\"test-id\", sloth_service=\"test-svc\", sloth_slo=\"test-name\"}[30d])\n",
 									Labels: map[string]string{
-										"sloth_window": "30d",
+										"test_label":    "label_1",
+										"extra_k1":      "extra_v1",
+										"extra_k2":      "extra_v2",
+										"sloth_service": "test-svc",
+										"sloth_slo":     "test-name",
+										"sloth_id":      "test-id",
+										"sloth_window":  "30d",
 									},
 								},
 							},
@@ -334,15 +340,15 @@ slo:error_budget:ratio{sloth_id="test-id", sloth_service="test-svc", sloth_slo="
 								{
 									Alert: "p_alert_test_name",
 									Expr: `(
-    (slo:sli_error:ratio_rate5m{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (14.4 * 0.0009999999999999432))
-    and ignoring (sloth_window)
-    (slo:sli_error:ratio_rate1h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (14.4 * 0.0009999999999999432))
+    max(slo:sli_error:ratio_rate5m{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
+    and
+    max(slo:sli_error:ratio_rate1h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (14.4 * 0.0009999999999999432)) without (sloth_window)
 )
-or ignoring (sloth_window)
+or
 (
-    (slo:sli_error:ratio_rate30m{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (6 * 0.0009999999999999432))
-    and ignoring (sloth_window)
-    (slo:sli_error:ratio_rate6h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (6 * 0.0009999999999999432))
+    max(slo:sli_error:ratio_rate30m{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (6 * 0.0009999999999999432)) without (sloth_window)
+    and
+    max(slo:sli_error:ratio_rate6h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (6 * 0.0009999999999999432)) without (sloth_window)
 )
 `,
 									Labels: map[string]string{
@@ -358,15 +364,15 @@ or ignoring (sloth_window)
 								{
 									Alert: "t_alert_test_name",
 									Expr: `(
-    (slo:sli_error:ratio_rate2h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (3 * 0.0009999999999999432))
-    and ignoring (sloth_window)
-    (slo:sli_error:ratio_rate1d{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (3 * 0.0009999999999999432))
+    max(slo:sli_error:ratio_rate2h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (3 * 0.0009999999999999432)) without (sloth_window)
+    and
+    max(slo:sli_error:ratio_rate1d{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (3 * 0.0009999999999999432)) without (sloth_window)
 )
-or ignoring (sloth_window)
+or
 (
-    (slo:sli_error:ratio_rate6h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (1 * 0.0009999999999999432))
-    and ignoring (sloth_window)
-    (slo:sli_error:ratio_rate3d{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (1 * 0.0009999999999999432))
+    max(slo:sli_error:ratio_rate6h{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (1 * 0.0009999999999999432)) without (sloth_window)
+    and
+    max(slo:sli_error:ratio_rate3d{sloth_id="test-id", sloth_service="test-svc", sloth_slo="test-name"} > (1 * 0.0009999999999999432)) without (sloth_window)
 )
 `,
 									Labels: map[string]string{
@@ -392,7 +398,12 @@ or ignoring (sloth_window)
 			assert := assert.New(t)
 			require := require.New(t)
 
-			svc, err := generate.NewService(generate.ServiceConfig{})
+			windowsRepo, err := alert.NewFSWindowsRepo(alert.FSWindowsRepoConfig{})
+			require.NoError(err)
+
+			svc, err := generate.NewService(generate.ServiceConfig{
+				AlertGenerator: alert.NewGenerator(windowsRepo),
+			})
 			require.NoError(err)
 
 			gotResp, err := svc.Generate(context.TODO(), test.req)

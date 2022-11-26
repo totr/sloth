@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/model/rulefmt"
 
 	"github.com/slok/sloth/internal/alert"
 	"github.com/slok/sloth/internal/info"
@@ -23,11 +23,11 @@ type ServiceConfig struct {
 
 func (c *ServiceConfig) defaults() error {
 	if c.AlertGenerator == nil {
-		c.AlertGenerator = alert.AlertGenerator
+		return fmt.Errorf("alert generator is required")
 	}
 
 	if c.SLIRecordingRulesGenerator == nil {
-		c.SLIRecordingRulesGenerator = prometheus.SLIRecordingRulesGenerator
+		c.SLIRecordingRulesGenerator = prometheus.OptimizedSLIRecordingRulesGenerator
 	}
 
 	if c.MetaRecordingRulesGenerator == nil {

@@ -7,7 +7,7 @@ import (
 	"io"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/model/rulefmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -138,7 +138,7 @@ func promRulesToKubeRules(rules []rulefmt.Rule) []monitoringv1.Rule {
 			Record:      r.Record,
 			Alert:       r.Alert,
 			Expr:        intstr.FromString(r.Expr),
-			For:         forS,
+			For:         monitoringv1.Duration(forS),
 			Labels:      r.Labels,
 			Annotations: r.Annotations,
 		})

@@ -65,36 +65,7 @@ spec:
 			expErr: true,
 		},
 
-		"Spec without time window should fail.": {
-			specYaml: `
-apiVersion: openslo/v1alpha
-kind: SLO
-metadata:
-  displayName: Ratio
-  name: ratio
-spec:
-  budgetingMethod: Timeslices
-  description: A great description of a ratio based SLO
-  objectives:
-  - ratioMetrics:
-      good:
-        source: prometheus
-        queryType: promql
-        query: latency_west_c7{code="GOOD",instance="localhost:3000",job="prometheus",service="globacount"}
-      total:
-        source: prometheus
-        queryType: promql
-        query: latency_west_c7{code="ALL",instance="localhost:3000",job="prometheus",service="globacount"}
-    displayName: painful
-    target: 0.98
-    value: 1
-  service: my-test-service
-  timeWindows: []
-`,
-			expErr: true,
-		},
-
-		"Spec with wrong time window should fail.": {
+		"Spec with wrong time window units should fail.": {
 			specYaml: `
 apiVersion: openslo/v1alpha
 kind: SLO
@@ -119,9 +90,9 @@ spec:
     value: 1
   service: my-test-service
   timeWindows:
-  - count: 28
+  - count: 720
     isRolling: true
-    unit: Day
+    unit: Hour
 `,
 			expErr: true,
 		},
@@ -243,7 +214,7 @@ spec:
     target: 0.999
   service: my-test-service
   timeWindows:
-  - count: 30
+  - count: 28
     isRolling: true
     unit: Day
 `,
@@ -253,7 +224,7 @@ spec:
 					Name:        "ratio-0",
 					Service:     "my-test-service",
 					Description: "A great description of a ratio based SLO",
-					TimeWindow:  30 * 24 * time.Hour,
+					TimeWindow:  28 * 24 * time.Hour,
 					SLI: prometheus.SLI{
 						Raw: &prometheus.SLIRaw{
 							ErrorRatioQuery: `
@@ -278,7 +249,7 @@ spec:
 					Name:        "ratio-1",
 					Service:     "my-test-service",
 					Description: "A great description of a ratio based SLO",
-					TimeWindow:  30 * 24 * time.Hour,
+					TimeWindow:  28 * 24 * time.Hour,
 					SLI: prometheus.SLI{
 						Raw: &prometheus.SLIRaw{
 							ErrorRatioQuery: `
@@ -306,7 +277,8 @@ spec:
 		t.Run(name, func(t *testing.T) {
 			assert := assert.New(t)
 
-			gotModel, err := openslo.YAMLSpecLoader.LoadSpec(context.TODO(), []byte(test.specYaml))
+			loader := openslo.NewYAMLSpecLoader(30 * 24 * time.Hour)
+			gotModel, err := loader.LoadSpec(context.TODO(), []byte(test.specYaml))
 
 			if test.expErr {
 				assert.Error(err)
@@ -385,7 +357,8 @@ kind:              SLO
 		t.Run(name, func(t *testing.T) {
 			assert := assert.New(t)
 
-			got := openslo.YAMLSpecLoader.IsSpecType(context.TODO(), []byte(test.specYaml))
+			loader := openslo.NewYAMLSpecLoader(30 * 24 * time.Hour)
+			got := loader.IsSpecType(context.TODO(), []byte(test.specYaml))
 
 			assert.Equal(test.exp, got)
 		})

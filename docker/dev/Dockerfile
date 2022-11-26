@@ -1,9 +1,11 @@
-FROM golang:1.17.1
+FROM golang:1.19.3
 
-ARG GOLANGCI_LINT_VERSION="1.42.0"
-ARG MOCKERY_VERSION="2.5.1"
-ARG GOMARKDOC_VERSION="0.1.3"
-ARG HELM_VERSION="3.6.3"
+LABEL org.opencontainers.image.source https://github.com/slok/sloth
+
+ARG GOLANGCI_LINT_VERSION="1.50.0"
+ARG MOCKERY_VERSION="2.14.0"
+ARG GOMARKDOC_VERSION="0.4.1"
+ARG HELM_VERSION="3.10.0"
 ARG ostype=Linux
 
 RUN apt-get update && apt-get install -y \
@@ -53,8 +55,8 @@ RUN cd /tmp/cache && \
 # Helm testing app.
 USER root
 RUN mkdir -p /tmp/cache
-COPY deploy/kubernetes/helm/tests/go.mod /tmp/cache
-COPY deploy/kubernetes/helm/tests/go.sum /tmp/cache
+COPY deploy/kubernetes/helm/sloth/tests/go.mod /tmp/cache
+COPY deploy/kubernetes/helm/sloth/tests/go.sum /tmp/cache
 RUN chown app:app -R /tmp/cache
 USER app
 RUN cd /tmp/cache && \
